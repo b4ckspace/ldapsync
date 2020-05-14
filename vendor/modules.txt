@@ -1,0 +1,8 @@
+# github.com/go-asn1-ber/asn1-ber v1.3.1
+github.com/go-asn1-ber/asn1-ber
+# github.com/go-ldap/ldap/v3 v3.1.10
+## explicit
+github.com/go-ldap/ldap/v3
+# github.com/kelseyhightower/envconfig v1.4.0
+## explicit
+github.com/kelseyhightower/envconfig
