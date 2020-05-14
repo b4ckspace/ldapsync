@@ -1,0 +1,23 @@
+kind: pipeline
+name: default
+
+steps:
+  - name: build
+    image: golang:alpine
+    environment:
+      CGO_ENABLED: 0
+    commands:
+      - go build -mod=vendor -o ldapsync
+      - tar zcf ldapsync.tar.gz ldapsync
+
+  - name: release
+    image: plugins/github-release
+    settings:
+      api_key:
+        from_secret: github_token
+      files:
+        - ldapsync.tar.gz
+      checksum:
+        - sha256
+    when:
+      event: tag
