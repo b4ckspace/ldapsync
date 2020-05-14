@@ -18,19 +18,22 @@ type (
 		Password   string `envconfig:"PASSWORD" required:"true"`
 		ServerName string `envconfig:"SERVER_NAME" required:"true"`
 
-		BaseDN  string `envconfig:"BASE_DN" required:"true"`
-		Filter  string `envconfig:"FILTER" required:"true"`
-		Outfile string `envconfig:"OUTFILE" required:"true"`
+		BaseDN    string `envconfig:"BASE_DN" required:"true"`
+		Filter    string `envconfig:"FILTER" required:"true"`
+		PassFile  string `envconfig:"PASS_FILE" required:"true"`
+		AliasFile string `envconfig:"ALIAS_FILE" required:"true"`
 	}
 )
 
 func main() {
+	// parse config
 	c := Config{}
 	err := envconfig.Process("", &c)
 	if err != nil {
 		log.Fatalf("unable to parse environment: %s", err)
 	}
 
+	// connect, secure and login to ldap
 	conn, err := ldap.DialURL(c.Url)
 	if err != nil {
 		log.Fatalf("unable to connect to ldap: %s", err)
@@ -46,24 +49,23 @@ func main() {
 		log.Fatalf("unable to bind as %s: %s", c.BindDN, err)
 	}
 
+	// search ldap
 	res, err := conn.Search(&ldap.SearchRequest{
 		BaseDN:     c.BaseDN,
 		Filter:     c.Filter,
 		Scope:      ldap.ScopeWholeSubtree,
-		Attributes: []string{"email", "userPassword"},
+		Attributes: []string{"email", "userPassword", "emailAlias"},
 	})
 	if err != nil {
 		log.Fatalf("unable to search: %s", err)
 	}
 
-	tmpFile := fmt.Sprintf("%s.tmp", c.Outfile)
-	f, err := os.OpenFile(tmpFile, os.O_TRUNC|os.O_CREATE|os.O_RDWR, 0600)
+	// create temporary passfile
+	tmpPassfile := fmt.Sprintf("%s.tmp", c.PassFile)
+	f, err := os.OpenFile(tmpPassfile, os.O_TRUNC|os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		log.Fatalf("unable to open outputfile: %s", err)
 	}
-	defer f.Close()
-	defer f.Sync()
-
 	for _, entry := range res.Entries {
 		umail := entry.GetAttributeValue("email")
 		upass := entry.GetAttributeValue("userPassword")
@@ -73,7 +75,50 @@ func main() {
 			log.Fatalf("unable to write temporary outfile: %s", err)
 		}
 	}
-	err = os.Rename(tmpFile, c.Outfile)
+	_ = f.Close()
+
+	// create temporary aliasfile
+	tmpAliasfile := fmt.Sprintf("%s.tmp", c.AliasFile)
+	f, err = os.OpenFile(tmpAliasfile, os.O_TRUNC|os.O_CREATE|os.O_RDWR, 0600)
+	if err != nil {
+		log.Fatalf("unable to open aliasfile: %s", err)
+	}
+	aliases := map[string][]string{}
+	for _, entry := range res.Entries {
+		umail := entry.GetAttributeValue("email")
+		ualiases := entry.GetAttributeValues("emailAlias")
+		for _, ualias := range ualiases {
+			_, ok := aliases[ualias]
+			if !ok {
+				aliases[ualias] = []string{}
+			}
+			aliases[ualias] = append(aliases[ualias], umail)
+		}
+	}
+	for alias, targets := range aliases {
+		_, err := fmt.Fprintf(f, "%s: %s", alias, targets[0])
+		if err != nil {
+			log.Fatalf("unable to write temporary aliasfile: %s", err)
+		}
+		for _, target := range targets[1:] {
+			_, err := fmt.Fprintf(f, ",%s", target)
+			if err != nil {
+				log.Fatalf("unable to write temporary aliasfile: %s", err)
+			}
+		}
+		_, err = fmt.Fprintf(f, "\n")
+		if err != nil {
+			log.Fatalf("unable to write temporary aliasfile: %s", err)
+		}
+	}
+	_ = f.Close()
+
+	// update files
+	err = os.Rename(tmpAliasfile, c.AliasFile)
+	if err != nil {
+		log.Fatalf("unable to replace aliasfile: %s", err)
+	}
+	err = os.Rename(tmpPassfile, c.PassFile)
 	if err != nil {
 		log.Fatalf("unable to replace outfile: %s", err)
 	}

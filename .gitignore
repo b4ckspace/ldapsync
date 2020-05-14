@@ -1,3 +1,4 @@
 mail.passwd
+aliases
 .env
 ldapsync

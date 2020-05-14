@@ -14,5 +14,6 @@ export SERVER_NAME="ldap.example.com"         # certificate hostname
 
 export BASE_DN="ou=member,dc=example"         # dn where the users are
 export FILTER="((serviceEnabled=mail))"       # filter
-export OUTFILE="mail.passwd"                  # file to write
+export PASS_FILE="mail.passwd"                # output passfile
+export ALIAS_FILE="aliases"                   # output aliasfile
 ```
